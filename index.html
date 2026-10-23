@@ -39,10 +39,10 @@ header b{flex:1;text-align:center;overflow:hidden;white-space:nowrap;text-overfl
 <button class=btn onclick=newChat()>New chat</button><button class="btn g" onclick="show('')">Close</button><div id=cl></div></div>
 
 <div class=pane id=ps><h2>Settings</h2>
-<label>Provider</label><select id=s_prov><option value=openai>OpenAI</option><option value=anthropic>Anthropic</option><option value=openrouter>OpenRouter</option><option value=custom>Custom (OpenAI-compatible)</option></select>
-<label>Base URL</label><input id=s_base autocapitalize=none><label>API key (stays on this iPhone)</label><input id=s_key type=password autocapitalize=none>
+<label>Provider</label><select id=s_prov><option value=local>On-device (free, no key)</option><option value=openai>OpenAI</option><option value=anthropic>Anthropic</option><option value=openrouter>OpenRouter</option><option value=custom>Custom (OpenAI-compatible)</option></select>
+<div id=apibox><label>Base URL</label><input id=s_base autocapitalize=none><label>API key (stays on this iPhone)</label><input id=s_key type=password autocapitalize=none>
 <label>Model</label><input id=s_model list=ml autocapitalize=none><datalist id=ml></datalist>
-<button class="btn g" onclick=models()>Fetch model list</button><button class=btn onclick=test()>Test connection</button><div id=tr></div>
+<button class="btn g" onclick=models()>Fetch model list</button><button class=btn onclick=test()>Test connection</button></div><div id=lbox style="display:none"><label>Choose a model, then download it once (it is saved on your iPhone)</label><select id=lsel><option value="SmolLM2-360M-Instruct-q4f16_1-MLC">SmolLM2 360M (~0.4 GB, fastest)</option><option value="Qwen2.5-0.5B-Instruct-q4f16_1-MLC">Qwen2.5 0.5B (~0.5 GB)</option><option value="Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama 3.2 1B (~0.9 GB, balanced)</option><option value="Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen2.5 1.5B (~1.1 GB, smarter)</option><option value="Llama-3.2-3B-Instruct-q4f16_1-MLC">Llama 3.2 3B (~2 GB, may crash on iPhone)</option></select><button class=btn onclick=dlLocal()>Download &amp; load model</button></div><div id=tr></div>
 <label>Your name</label><input id=s_name><label>Personality</label><select id=s_pers><option value=caring>Caring & supportive</option><option value=classic>Classic Bob</option><option value=calm>Calm & thoughtful</option><option value=coach>Motivational coach</option><option value=formal>Professional / formal</option><option value=witty>Extra witty</option></select>
 <label>System prompt</label><textarea id=s_sys rows=4></textarea><label>Temperature (blank = model default)</label><input id=s_temp inputmode=decimal>
 <div class=ck><input type=checkbox id=s_mem>Use memory</div><div class=ck><input type=checkbox id=s_auto>Let Bob save facts automatically</div><div class=ck><input type=checkbox id=s_tts>Speak replies aloud (voice mode)</div>
@@ -56,9 +56,9 @@ header b{flex:1;text-align:center;overflow:hidden;white-space:nowrap;text-overfl
 
 <script>
 const $=s=>document.querySelector(s),LS=localStorage;
-const P={openai:['https://api.openai.com/v1','gpt-4o-mini'],anthropic:['https://api.anthropic.com/v1','claude-sonnet-4-5'],openrouter:['https://openrouter.ai/api/v1','openai/gpt-4o-mini'],custom:['http://192.168.1.10:11434/v1','llama3.1']};
+const P={local:['','Llama-3.2-1B-Instruct-q4f16_1-MLC'],openai:['https://api.openai.com/v1','gpt-4o-mini'],anthropic:['https://api.anthropic.com/v1','claude-sonnet-4-5'],openrouter:['https://openrouter.ai/api/v1','openai/gpt-4o-mini'],custom:['http://192.168.1.10:11434/v1','llama3.1']};
 const PERS={caring:"Be warm, caring and emotionally attentive: acknowledge how the user seems to feel first, be patient and encouraging, use their name, stay honest rather than flattering.",classic:"Be lively, energetic, a little unhinged and friendly, with humour and real warmth.",calm:"Be calm, thoughtful and measured; avoid hype; prefer clarity.",coach:"Be a motivational coach: encouraging, practical, action-oriented.",formal:"Be professional, formal and polished; minimal slang or jokes.",witty:"Be extra witty and playfully sarcastic while staying kind and helpful."};
-let S=JSON.parse(LS.ab_s||'null')||{prov:'openai',base:P.openai[0],model:P.openai[1],keys:{},sys:"You are AI Bob, a smart, friendly, concise personal assistant on the user's iPhone.",temp:'',name:'',pers:'caring',mem:true,auto:true,tts:false};
+let S=JSON.parse(LS.ab_s||'null')||{prov:'local',base:'',model:'Llama-3.2-1B-Instruct-q4f16_1-MLC',keys:{},sys:"You are AI Bob, a smart, friendly, concise personal assistant on the user's iPhone.",temp:'',name:'',pers:'caring',mem:true,auto:true,tts:false};
 let D=JSON.parse(LS.ab_d||'null')||{chats:[],mems:[],les:[]};
 S.fb=S.fb||'';S.lp=S.lp||{heal:true,verify:true,meta:true,tier:true,learn:true};['g','epi','ds','cur'].forEach(k=>D[k]=D[k]||[]);
 let cur=null,busy=false,ctl=null,img=null;
@@ -90,15 +90,25 @@ const l=rel(D.les.filter(x=>x.o!='neg'),q,4,x=>x.t+' '+x.l);if(l.length)s+='\n\n
 if(S.auto)s+='\n\nIf the user shares a lasting fact or asks you to remember something, end your reply with [[remember: short fact]] (hidden from them).'}
 s+=tierCtx(q);return s+'\n\nLIVE TOOLS: for current information output ONLY one tag and stop: [[news: topic or top]] for headlines, [[search: query]] for web/Wikipedia results, [[read: url]] for page text. You will then receive the results; answer from them and cite links. Never claim you cannot browse.'}
 
+/* ---------- on-device models (WebLLM) ---------- */
+let eng=null,engId='',lstat='';
+function setStat(t){lstat=t;$('#tr').textContent=t;if(busy)render()}
+async function loadLocal(id){if(eng&&engId==id)return eng;if(!navigator.gpu)throw Error('This browser has no WebGPU, so on-device models cannot run. Update iOS, or use an API key instead.');
+const{CreateMLCEngine}=await import('https://esm.run/@mlc-ai/web-llm@0.2.79');eng=null;eng=await CreateMLCEngine(id,{initProgressCallback:r=>setStat(r.text)});engId=id;lstat='';return eng}
+async function dlLocal(){try{setStat('Starting download…');await loadLocal(S.model);setStat('✅ Model ready. Close settings and chat. It works offline now.')}catch(e){setStat('❌ '+e.message)}}
 /* ---------- API ---------- */
-async function* stream(msgs,sys,signal){const A=S.prov=='anthropic',key=S.keys[S.prov]||'';
+async function* stream(msgs,sys,signal){
+if(S.prov=='local'){const e=await loadLocal(S.model),ms=[{role:'system',content:sys.slice(0,5000)},...msgs.filter(m=>m.c).slice(-8).map(m=>({role:m.r,content:m.c.slice(0,3000)}))];
+ const it=await e.chat.completions.create({messages:ms,stream:true,temperature:S.temp===''?0.7:+S.temp,max_tokens:1024});signal?.addEventListener('abort',()=>e.interruptGenerate());
+ for await(const ch of it){const t=ch.choices[0]?.delta?.content;if(t)yield t}return}
+const A=S.prov=='anthropic',key=S.keys[S.prov]||'';
 if(!key&&S.prov!='custom')throw Error('Add your API key in Settings (⚙️).');
 const cv=m=>{if(!m.img)return{role:m.r,content:m.c};const b=m.img.split(',')[1];return{role:m.r,content:[{type:'text',text:m.c||'Describe this image.'},A?{type:'image',source:{type:'base64',media_type:'image/jpeg',data:b}}:{type:'image_url',image_url:{url:m.img}}]}};
 const ms=msgs.filter(m=>m.c||m.img).map(cv);let url=S.base.trim().replace(/\/+$/,''),h={'Content-Type':'application/json'},body={model:S.model,stream:true};
 if(A){url+='/messages';h['x-api-key']=key;h['anthropic-version']='2023-06-01';h['anthropic-dangerous-direct-browser-access']='true';body.system=sys;body.messages=ms;body.max_tokens=4096}
 else{url+='/chat/completions';if(key)h.Authorization='Bearer '+key;body.messages=[{role:'system',content:sys},...ms]}
 if(S.temp!=='')body.temperature=+S.temp;
-const r=await fetch(url,{method:'POST',headers:h,body:JSON.stringify(body),signal});
+let r;try{r=await fetch(url,{method:'POST',headers:h,body:JSON.stringify(body),signal})}catch(e){if(e.name=='AbortError')throw e;throw Error('Could not reach '+new URL(url).host+'. Check your internet, remove any spaces from the API key, and open the app in Safari or from the home screen, not inside another app.')}
 if(!r.ok)throw Error('HTTP '+r.status+': '+(await r.text()).slice(0,300));
 const rd=r.body.getReader(),dc=new TextDecoder();let buf='';
 for(;;){const{done,value}=await rd.read();if(done)break;buf+=dc.decode(value,{stream:true});const ls=buf.split('\n');buf=ls.pop();
@@ -123,7 +133,7 @@ catch(e){return'TOOL ERROR: '+e.message+'. Tell the user plainly; do not invent 
 function newChat(){const c={id:Date.now().toString(36),t:'New chat',m:[],u:Date.now()};D.chats.unshift(c);cur=c.id;save();render();show('')}
 function ctx(c,a){const i=c.m.indexOf(a);let m=c.m.slice(Math.max(c.sn||0,i-40),i);while(m.length&&m[0].r!='user')m.shift();return m.map(x=>x.h?{...x,c:x.c.slice(0,3500)}:x)}
 function render(){const c=chat(),b=$('#msgs'),near=b.scrollHeight-b.scrollTop-b.clientHeight<160;$('#ttl').textContent=c?c.t:'AI Bob';
-b.innerHTML=(c?c.m:[]).filter(m=>!m.h).map(m=>{if(m.r=='user')return`<div class="m u">${m.img?`<img src="${m.img}" style="max-width:100%;border-radius:10px"><br>`:m.hi?'📷 ':''}${esc(m.c)}</div>`;const t=strip(m.c);return`<div class="m a">${t?md(t):''}${m.tool?`<div class=tool>🔎 ${esc(m.tool)}</div>`:!t&&busy?'…':''}</div>`}).join('')||'<p style="text-align:center;opacity:.6;margin-top:28vh">Hi, I\'m AI Bob.<br>Ask me anything, or ask for today\'s news.</p>';
+b.innerHTML=(c?c.m:[]).filter(m=>!m.h).map(m=>{if(m.r=='user')return`<div class="m u">${m.img?`<img src="${m.img}" style="max-width:100%;border-radius:10px"><br>`:m.hi?'📷 ':''}${esc(m.c)}</div>`;const t=strip(m.c);return`<div class="m a">${t?md(t):''}${m.tool?`<div class=tool>🔎 ${esc(m.tool)}</div>`:!t&&busy?(lstat||'…'):''}</div>`}).join('')||'<p style="text-align:center;opacity:.6;margin-top:28vh">Hi, I\'m AI Bob.<br>Ask me anything, or ask for today\'s news.</p>';
 if(near)b.scrollTop=b.scrollHeight;$('#snd').textContent=busy?'⏹':'⬆️'}
 let raf=0;const upd=()=>{raf||(raf=requestAnimationFrame(()=>{raf=0;render()}))};
 function go(){if(busy){ctl.abort();return}const t=$('#in').value.trim();$('#in').value='';$('#in').style.height='';send(t)}
@@ -148,9 +158,10 @@ const ren=id=>{const c=D.chats.find(x=>x.id==id),t=prompt('Rename chat',c.t);if(
 const del=id=>{if(!confirm('Delete this chat?'))return;D.chats=D.chats.filter(c=>c.id!=id);if(cur==id)cur=D.chats[0]?.id;if(!cur)return newChat();save();chatList();render()};
 const origShow=show;window.show=id=>{origShow(id);if(id=='pc')chatList()};
 const F=[['prov'],['base'],['model'],['sys'],['temp'],['name'],['pers'],['mem',1],['auto',1],['tts',1],['fb']];
-function fill(){F.forEach(([k,c])=>{const e=$('#s_'+k);c?e.checked=S[k]:e.value=S[k]});$('#s_key').value=S.keys[S.prov]||''}
-F.forEach(([k,c])=>$('#s_'+k).addEventListener('input',e=>{S[k]=c?e.target.checked:e.target.value;if(k=='prov'){S.base=P[S.prov][0];S.model=P[S.prov][1];fill()}save()}));
-$('#s_key').oninput=e=>{S.keys[S.prov]=e.target.value.trim();save()};
+function fill(){F.forEach(([k,c])=>{const e=$('#s_'+k);c?e.checked=S[k]:e.value=S[k]});$('#s_key').value=S.keys[S.prov]||'';const lc=S.prov=='local';$('#apibox').style.display=lc?'none':'';$('#lbox').style.display=lc?'':'none';if(lc)$('#lsel').value=S.model}
+F.forEach(([k,c])=>$('#s_'+k).addEventListener('input',e=>{S[k]=c?e.target.checked:e.target.value;if(k=='prov'){S.base=P[S.prov][0];S.model=P[S.prov][1];if(S.prov=='local'){DEEP.forEach(k=>S.lp[k]=false);renderLps()}fill()}save()}));
+$('#s_key').oninput=e=>{S.keys[S.prov]=e.target.value.replace(/[^\x21-\x7E]/g,'');save()};
+$('#lsel').onchange=e=>{S.model=e.target.value;save()};
 async function test(){$('#tr').textContent='Testing…';try{$('#tr').textContent='✅ '+(await ask('You are a test.','Reply with just: Connected.')).trim()}catch(e){$('#tr').textContent='❌ '+e.message}}
 async function models(){try{const k=S.keys[S.prov]||'',A=S.prov=='anthropic',h=A?{'x-api-key':k,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'}:{Authorization:'Bearer '+k};
 const j=await(await fetch(S.base.replace(/\/+$/,'')+'/models',{headers:h})).json();$('#ml').innerHTML=j.data.map(m=>`<option value="${esc(m.id)}">`).join('');$('#tr').textContent='✅ '+j.data.length+' models loaded: tap the Model box to choose.'}catch(e){$('#tr').textContent='❌ Could not load models: '+e.message}}
@@ -210,7 +221,7 @@ if(L.tier){const t=await J('Extract up to 5 durable facts from this exchange as 
 save()}
 function dl(b,n){const f=new File([b],n);if(navigator.canShare?.({files:[f]}))navigator.share({files:[f]}).catch(()=>{});else{const x=document.createElement('a');x.href=URL.createObjectURL(b);x.download=n;x.click()}}
 const expDS=()=>dl(new Blob([D.ds.map(x=>JSON.stringify({messages:[{role:'user',content:x.prompt},{role:'assistant',content:x.completion}],verified:x.verified})).join('\n')],{type:'application/jsonl'}),'bob-training-'+new Date().toISOString().slice(0,10)+'.jsonl');
-$('#lps').innerHTML=Object.entries(LPN).map(([k,v])=>`<div class=ck><input type=checkbox data-lp=${k} ${S.lp[k]?'checked':''}>${v}</div>`).join('');
+const renderLps=()=>{$('#lps').innerHTML=Object.entries(LPN).map(([k,v])=>`<div class=ck><input type=checkbox data-lp=${k} ${S.lp[k]?'checked':''}>${v}</div>`).join('')};renderLps();
 $('#lps').onchange=e=>{S.lp[e.target.dataset.lp]=e.target.checked;save()};
 
 /* ---------- voice, photos, input ---------- */
@@ -220,5 +231,5 @@ function chip(){const c=$('#chip');c.style.display=img?'block':'none';c.innerHTM
 $('#pic').onchange=e=>{const f=e.target.files[0];if(!f)return;const im=new Image();im.onload=()=>{const s=Math.min(1,1280/Math.max(im.width,im.height)),cv=document.createElement('canvas');cv.width=im.width*s;cv.height=im.height*s;cv.getContext('2d').drawImage(im,0,0,cv.width,cv.height);img=cv.toDataURL('image/jpeg',.82);chip()};im.src=URL.createObjectURL(f);e.target.value=''};
 $('#in').addEventListener('input',e=>{e.target.style.height='auto';e.target.style.height=Math.min(130,e.target.scrollHeight)+'px'});
 document.addEventListener('visibilitychange',()=>{if(document.hidden)save()});
-cur=D.chats[0]?.id;if(!cur)newChat();else render();if(!S.keys[S.prov]&&S.prov!='custom'){fill();show('ps')}
+cur=D.chats[0]?.id;if(!cur)newChat();else render();if(!S.keys[S.prov]&&S.prov!='custom'&&S.prov!='local'){fill();show('ps')}
 </script></body></html>
