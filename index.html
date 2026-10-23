@@ -1,0 +1,224 @@
+<!doctype html><html lang=en><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name=apple-mobile-web-app-capable content=yes><meta name=mobile-web-app-capable content=yes>
+<meta name=apple-mobile-web-app-title content="AI Bob"><meta name=apple-mobile-web-app-status-bar-style content=default>
+<link rel=apple-touch-icon href=icon.png><title>AI Bob</title>
+<style>
+:root{--bg:#fff;--fg:#14161a;--card:#eef0f4;--ac:#3d4fd1;--bd:#d6d9e0}
+@media(prefers-color-scheme:dark){:root{--bg:#0c0d10;--fg:#eceef2;--card:#1a1c22;--ac:#6b7bff;--bd:#2c2f38}}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:16px/1.45 -apple-system,system-ui,sans-serif;display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+button,select,input,textarea{font:inherit;color:inherit}
+header{display:flex;align-items:center;padding:6px 8px;border-bottom:1px solid var(--bd)}
+header b{flex:1;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:600}
+.ib{background:none;border:0;font-size:22px;padding:4px 8px;cursor:pointer}
+#msgs{flex:1;overflow:auto;padding:10px 12px}
+.m{max-width:90%;padding:9px 13px;border-radius:18px;margin:7px 0;overflow-wrap:anywhere}
+.u{background:var(--ac);color:#fff;margin-left:auto;white-space:pre-wrap}.a{background:var(--card)}
+.m pre{background:#0d1117;color:#e6edf3;padding:30px 10px 10px;border-radius:10px;overflow:auto;position:relative;font-size:13px;margin:8px 0;white-space:pre}
+.m code{font-family:ui-monospace,Menlo,monospace;font-size:.9em}
+.cp{position:absolute;right:6px;top:5px;font-size:12px;background:#2a2f3a;color:#cfd6e4;border:0;border-radius:6px;padding:3px 8px}
+.m table{border-collapse:collapse;display:block;overflow:auto}.m td,.m th{border:1px solid var(--bd);padding:4px 8px}
+.m a{color:inherit}.tool{font-size:13px;opacity:.65}
+#bar{display:flex;gap:4px;align-items:flex-end;padding:8px;border-top:1px solid var(--bd)}
+#in{flex:1;border:1px solid var(--bd);border-radius:18px;padding:8px 13px;background:var(--card);resize:none;max-height:130px}
+#chip{display:none;padding:4px 12px;font-size:13px}
+.pane{position:fixed;inset:0;background:var(--bg);z-index:5;overflow:auto;padding:calc(env(safe-area-inset-top) + 10px) 14px 60px;display:none}.pane.on{display:block}
+.pane h2{margin:4px 0}label{display:block;font-size:13px;opacity:.7;margin-top:12px}
+.pane input:not([type=checkbox]),.pane select,.pane textarea{width:100%;padding:9px;border:1px solid var(--bd);border-radius:10px;background:var(--card)}
+.btn{padding:9px 14px;border-radius:10px;border:0;background:var(--ac);color:#fff;margin:6px 6px 0 0}.btn.g{background:var(--card);color:var(--fg)}
+.li{padding:10px 4px;border-bottom:1px solid var(--bd);display:flex;gap:6px;align-items:center}.li span{flex:1}
+.ck{display:flex;gap:8px;align-items:center;margin-top:10px;font-size:16px;opacity:1}
+</style></head><body>
+<header><button class=ib onclick="show('pc')">☰</button><b id=ttl>AI Bob</b><button class=ib onclick="show('pm');memList()">🧠</button><button class=ib onclick="show('ps');fill()">⚙️</button></header>
+<div id=msgs></div><div id=chip></div>
+<div id=bar><button class=ib onclick="pic.click()">📷</button><input type=file id=pic accept="image/*" hidden>
+<textarea id=in rows=1 placeholder="Message AI Bob"></textarea><button class=ib id=mic onclick=mic()>🎤</button><button class=ib id=snd onclick=go()>⬆️</button></div>
+
+<div class=pane id=pc><h2>Chats</h2><input id=q placeholder="Search chats" oninput=chatList()>
+<button class=btn onclick=newChat()>New chat</button><button class="btn g" onclick="show('')">Close</button><div id=cl></div></div>
+
+<div class=pane id=ps><h2>Settings</h2>
+<label>Provider</label><select id=s_prov><option value=openai>OpenAI</option><option value=anthropic>Anthropic</option><option value=openrouter>OpenRouter</option><option value=custom>Custom (OpenAI-compatible)</option></select>
+<label>Base URL</label><input id=s_base autocapitalize=none><label>API key (stays on this iPhone)</label><input id=s_key type=password autocapitalize=none>
+<label>Model</label><input id=s_model list=ml autocapitalize=none><datalist id=ml></datalist>
+<button class="btn g" onclick=models()>Fetch model list</button><button class=btn onclick=test()>Test connection</button><div id=tr></div>
+<label>Your name</label><input id=s_name><label>Personality</label><select id=s_pers><option value=caring>Caring & supportive</option><option value=classic>Classic Bob</option><option value=calm>Calm & thoughtful</option><option value=coach>Motivational coach</option><option value=formal>Professional / formal</option><option value=witty>Extra witty</option></select>
+<label>System prompt</label><textarea id=s_sys rows=4></textarea><label>Temperature (blank = model default)</label><input id=s_temp inputmode=decimal>
+<div class=ck><input type=checkbox id=s_mem>Use memory</div><div class=ck><input type=checkbox id=s_auto>Let Bob save facts automatically</div><div class=ck><input type=checkbox id=s_tts>Speak replies aloud (voice mode)</div>
+<label>Fallback model (used by self-healing if the main model keeps failing)</label><input id=s_fb autocapitalize=none><h2 style="margin-top:20px">Reasoning loops</h2><p style="font-size:13px;opacity:.7;margin:0">Each loop adds API calls: slower and costlier, but smarter.</p><div id=lps></div>
+<button class=btn onclick="show('')">Done</button></div>
+
+<div class=pane id=pm><h2>Memory</h2><input id=nm placeholder="Add something for Bob to remember"><button class=btn onclick=addM()>Add</button><button class="btn g" onclick=tidy()>Tidy with AI</button>
+<div id=ml2></div><button class="btn g" onclick=expDS()>Export training data (JSONL)</button><h2>Backup</h2><p style="font-size:14px;opacity:.7">Export saves chats, memory and lessons (not your API key). Import also reads Crazy Bob memory files and knowledge .txt packs.</p>
+<button class=btn onclick=exp()>Export backup</button><button class="btn g" onclick="imp.click()">Import file</button><input type=file id=imp hidden><div id=ir></div>
+<button class=btn onclick="show('')">Done</button></div>
+
+<script>
+const $=s=>document.querySelector(s),LS=localStorage;
+const P={openai:['https://api.openai.com/v1','gpt-4o-mini'],anthropic:['https://api.anthropic.com/v1','claude-sonnet-4-5'],openrouter:['https://openrouter.ai/api/v1','openai/gpt-4o-mini'],custom:['http://192.168.1.10:11434/v1','llama3.1']};
+const PERS={caring:"Be warm, caring and emotionally attentive: acknowledge how the user seems to feel first, be patient and encouraging, use their name, stay honest rather than flattering.",classic:"Be lively, energetic, a little unhinged and friendly, with humour and real warmth.",calm:"Be calm, thoughtful and measured; avoid hype; prefer clarity.",coach:"Be a motivational coach: encouraging, practical, action-oriented.",formal:"Be professional, formal and polished; minimal slang or jokes.",witty:"Be extra witty and playfully sarcastic while staying kind and helpful."};
+let S=JSON.parse(LS.ab_s||'null')||{prov:'openai',base:P.openai[0],model:P.openai[1],keys:{},sys:"You are AI Bob, a smart, friendly, concise personal assistant on the user's iPhone.",temp:'',name:'',pers:'caring',mem:true,auto:true,tts:false};
+let D=JSON.parse(LS.ab_d||'null')||{chats:[],mems:[],les:[]};
+S.fb=S.fb||'';S.lp=S.lp||{heal:true,verify:true,meta:true,tier:true,learn:true};['g','epi','ds','cur'].forEach(k=>D[k]=D[k]||[]);
+let cur=null,busy=false,ctl=null,img=null;
+const rep=(k,v)=>k=='img'?undefined:v;
+const save=()=>{LS.ab_s=JSON.stringify(S);try{LS.ab_d=JSON.stringify(D,rep)}catch(e){alert('Storage full: export a backup, then delete old chats.')}};
+navigator.storage?.persist?.();
+const esc=t=>t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const show=id=>document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==id));
+const chat=()=>D.chats.find(c=>c.id==cur);
+const W=t=>new Set(t.toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>3));
+const strip=t=>t.replace(/\[\[remember:[\s\S]*?\]\]/gi,'').replace(/\[\[(news|search|read):[^\]]*\]\]/gi,'').replace(/\[\[[^\]]*$/,'').trim();
+
+function md(t){const bl=[];t=t.replace(/```(\w*)\n?([\s\S]*?)```/g,(_,l,c)=>{bl.push(c);return'\u0000'+(bl.length-1)+'\u0000'});t=esc(t);
+t=t.replace(/((?:^\|.*\|[ \t]*\n?)+)/gm,tb=>'<table>'+tb.trim().split('\n').filter(x=>!/^\|[\s:|-]+\|$/.test(x.trim())).map((x,i)=>'<tr>'+x.trim().slice(1,-1).split('|').map(c=>`<${i?'td':'th'}>${c.trim()}</${i?'td':'th'}>`).join('')+'</tr>').join('')+'</table>');
+t=t.replace(/^#{1,6} (.*)$/gm,'<b>$1</b>').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/(^|\W)\*(?!\s)(.+?)\*/g,'$1<i>$2</i>').replace(/`([^`\n]+)`/g,'<code>$1</code>').replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g,'<a href="$2" target=_blank rel=noopener>$1</a>').replace(/^[-*] (.*)$/gm,'• $1');
+return t.replace(/\n/g,'<br>').replace(/\u0000(\d+)\u0000/g,(_,i)=>'<pre><button class=cp onclick="navigator.clipboard.writeText(this.nextSibling.textContent);this.textContent=\'copied\'">copy</button><code>'+esc(bl[i])+'</code></pre>')}
+
+/* ---------- memory ---------- */
+function rel(a,q,n,f){if(a.length<=n)return a;const qw=W(q);return a.map((x,i)=>[x,[...W(f(x))].filter(w=>qw.has(w)).length*2+i/a.length]).sort((x,y)=>y[1]-x[1]).slice(0,n).map(x=>x[0])}
+function addMem(t){t=(t||'').trim();if(!t)return false;const w=W(t);if(D.mems.some(x=>x.t.toLowerCase()==t.toLowerCase()||(w.size&&[...w].filter(y=>W(x.t).has(y)).length/Math.max(1,Math.min(w.size,W(x.t).size))>.75)))return false;D.mems.push({t,ts:Date.now()});return true}
+function harvest(t){let m;const re=/\[\[remember:\s*([\s\S]*?)\]\]/gi;while(m=re.exec(t))addMem(m[1]);return strip(t)}
+function feedback(t,c){const m=c.m.filter(x=>!x.h),n=m.length;if(n<2||m[n-1].r!='assistant'||m[n-2].r!='user')return;const l=t.toLowerCase(),neg=/\b(wrong|incorrect|not right|that.?s not)\b/.test(l),pos=/(good job|well done|thank|great answer|perfect|100% right|that.?s correct)/.test(l);if(!neg&&!pos)return;const tp=m[n-2].c.slice(0,120);D.les.push({o:neg?'neg':'pos',t:tp,l:`When handling a problem similar to: ${tp}, the approach was reported as ${neg?'wrong; verify facts first':'helpful; reuse as a candidate, then verify'}.`});D.les=D.les.slice(-100)}
+function sysP(q,c){let s=S.sys,n=S.name.trim();
+s+=n?`\nThe user's name is ${n}; use it naturally.`:`\nYou don't know the user's name; ask warmly in your first reply.`;
+s+='\n'+PERS[S.pers]+'\nBe kind and patient. Verify before claiming; never invent facts or headlines.\nNow: '+new Date().toString();
+if(c&&c.sum)s+='\n\nEarlier in this chat (summary): '+c.sum;
+if(S.mem){const m=rel(D.mems,q,12,x=>x.t);if(m.length)s+='\n\nWhat you know about the user:\n'+m.map(x=>'- '+x.t).join('\n');
+const l=rel(D.les.filter(x=>x.o!='neg'),q,4,x=>x.t+' '+x.l);if(l.length)s+='\n\nLessons from past feedback (reuse, then verify):\n'+l.map(x=>'- '+x.l).join('\n');
+if(S.auto)s+='\n\nIf the user shares a lasting fact or asks you to remember something, end your reply with [[remember: short fact]] (hidden from them).'}
+s+=tierCtx(q);return s+'\n\nLIVE TOOLS: for current information output ONLY one tag and stop: [[news: topic or top]] for headlines, [[search: query]] for web/Wikipedia results, [[read: url]] for page text. You will then receive the results; answer from them and cite links. Never claim you cannot browse.'}
+
+/* ---------- API ---------- */
+async function* stream(msgs,sys,signal){const A=S.prov=='anthropic',key=S.keys[S.prov]||'';
+if(!key&&S.prov!='custom')throw Error('Add your API key in Settings (⚙️).');
+const cv=m=>{if(!m.img)return{role:m.r,content:m.c};const b=m.img.split(',')[1];return{role:m.r,content:[{type:'text',text:m.c||'Describe this image.'},A?{type:'image',source:{type:'base64',media_type:'image/jpeg',data:b}}:{type:'image_url',image_url:{url:m.img}}]}};
+const ms=msgs.filter(m=>m.c||m.img).map(cv);let url=S.base.trim().replace(/\/+$/,''),h={'Content-Type':'application/json'},body={model:S.model,stream:true};
+if(A){url+='/messages';h['x-api-key']=key;h['anthropic-version']='2023-06-01';h['anthropic-dangerous-direct-browser-access']='true';body.system=sys;body.messages=ms;body.max_tokens=4096}
+else{url+='/chat/completions';if(key)h.Authorization='Bearer '+key;body.messages=[{role:'system',content:sys},...ms]}
+if(S.temp!=='')body.temperature=+S.temp;
+const r=await fetch(url,{method:'POST',headers:h,body:JSON.stringify(body),signal});
+if(!r.ok)throw Error('HTTP '+r.status+': '+(await r.text()).slice(0,300));
+const rd=r.body.getReader(),dc=new TextDecoder();let buf='';
+for(;;){const{done,value}=await rd.read();if(done)break;buf+=dc.decode(value,{stream:true});const ls=buf.split('\n');buf=ls.pop();
+for(const l of ls){if(!l.startsWith('data:'))continue;const p=l.slice(5).trim();if(p=='[DONE]')return;let j;try{j=JSON.parse(p)}catch{continue}
+const t=A?(j.type=='content_block_delta'?j.delta?.text:''):j.choices?.[0]?.delta?.content;if(t)yield t}}}
+async function ask(sys,u,sg){let o='';for await(const t of stream([{r:'user',c:u}],sys,sg))o+=t;return o}
+
+/* ---------- live tools: news, search, read ---------- */
+const gw=[u=>u,u=>'https://api.allorigins.win/raw?url='+encodeURIComponent(u),u=>'https://corsproxy.io/?'+encodeURIComponent(u),u=>'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u)];
+const get=(u,j)=>Promise.any(gw.map(async g=>{const r=await fetch(g(u),{signal:AbortSignal.timeout(9000)});if(!r.ok)throw 0;return j?r.json():r.text()}));
+async function feed(u,n){const x=new DOMParser().parseFromString(await get(u),'text/xml');return[...x.querySelectorAll('item,entry')].slice(0,n).map(i=>{const g=t=>i.querySelector(t)?.textContent?.trim()||'';return`${g('title')} (${(g('pubDate')||g('updated')||g('date')).slice(0,22)})\n${g('description').replace(/<[^>]+>/g,'').slice(0,200)}\n${g('link')||i.querySelector('link')?.getAttribute('href')||''}`})}
+async function tool(k,a){a=a.trim();try{
+if(k=='news'){const top=!a||/^top$/i.test(a),src=top?[['BBC','https://feeds.bbci.co.uk/news/world/rss.xml'],['Guardian','https://www.theguardian.com/world/rss'],['Al Jazeera','https://www.aljazeera.com/xml/rss/all.xml'],['NPR','https://feeds.npr.org/1001/rss.xml']]:[['Google News','https://news.google.com/rss/search?q='+encodeURIComponent(a)+'&hl=en']];
+const r=await Promise.allSettled(src.map(async([n,u])=>'## '+n+'\n'+(await feed(u,top?4:8)).join('\n\n'))),ok=r.filter(x=>x.status=='fulfilled').map(x=>x.value);if(!ok.length)throw Error('all news sources unreachable');return ok.join('\n\n')}
+if(k=='search'){const[w,g]=await Promise.allSettled([get('https://en.wikipedia.org/w/api.php?action=query&list=search&srlimit=5&format=json&origin=*&srsearch='+encodeURIComponent(a),1),feed('https://news.google.com/rss/search?q='+encodeURIComponent(a)+'&hl=en',5)]);let o='';
+if(w.value)o+='Wikipedia:\n'+w.value.query.search.map(s=>s.title+': '+s.snippet.replace(/<[^>]+>/g,'')+'\nhttps://en.wikipedia.org/wiki/'+encodeURIComponent(s.title.replace(/ /g,'_'))).join('\n\n');
+if(g.value)o+='\n\nRecent news:\n'+g.value.join('\n\n');if(!o)throw Error('search unreachable');return o}
+const r=await fetch('https://r.jina.ai/'+a,{signal:AbortSignal.timeout(15000)});return(await r.text()).slice(0,6000)}
+catch(e){return'TOOL ERROR: '+e.message+'. Tell the user plainly; do not invent anything.'}}
+
+/* ---------- chat ---------- */
+function newChat(){const c={id:Date.now().toString(36),t:'New chat',m:[],u:Date.now()};D.chats.unshift(c);cur=c.id;save();render();show('')}
+function ctx(c,a){const i=c.m.indexOf(a);let m=c.m.slice(Math.max(c.sn||0,i-40),i);while(m.length&&m[0].r!='user')m.shift();return m.map(x=>x.h?{...x,c:x.c.slice(0,3500)}:x)}
+function render(){const c=chat(),b=$('#msgs'),near=b.scrollHeight-b.scrollTop-b.clientHeight<160;$('#ttl').textContent=c?c.t:'AI Bob';
+b.innerHTML=(c?c.m:[]).filter(m=>!m.h).map(m=>{if(m.r=='user')return`<div class="m u">${m.img?`<img src="${m.img}" style="max-width:100%;border-radius:10px"><br>`:m.hi?'📷 ':''}${esc(m.c)}</div>`;const t=strip(m.c);return`<div class="m a">${t?md(t):''}${m.tool?`<div class=tool>🔎 ${esc(m.tool)}</div>`:!t&&busy?'…':''}</div>`}).join('')||'<p style="text-align:center;opacity:.6;margin-top:28vh">Hi, I\'m AI Bob.<br>Ask me anything, or ask for today\'s news.</p>';
+if(near)b.scrollTop=b.scrollHeight;$('#snd').textContent=busy?'⏹':'⬆️'}
+let raf=0;const upd=()=>{raf||(raf=requestAnimationFrame(()=>{raf=0;render()}))};
+function go(){if(busy){ctl.abort();return}const t=$('#in').value.trim();$('#in').value='';$('#in').style.height='';send(t)}
+async function send(text){if(busy||(!text&&!img))return;speechSynthesis.cancel();let c=chat();if(!c){newChat();c=chat()}
+feedback(text,c);c.m.push({r:'user',c:text,img,hi:!!img});img=null;chip();if(c.t=='New chat')c.t=(text||'Photo').slice(0,40);c.u=Date.now();
+let a={r:'assistant',c:''};c.m.push(a);busy=true;ctl=new AbortController();render();
+try{if(LP())await deep(c,a,text);else for(let rd=0;rd<4;rd++){a.c='';a.tool='';let out='';
+for await(const t of stream(ctx(c,a),sysP(text,c),ctl.signal)){out+=t;a.c=out;upd()}
+const tg=out.match(/\[\[(news|search|read):\s*([^\]]*)\]\]/i);
+if(tg&&rd<3){a.tool=`${tg[1]}: ${tg[2]||'top'}`;render();const res=await tool(tg[1].toLowerCase(),tg[2]);c.m.push({r:'user',h:1,c:`[Tool result for ${tg[1]}: ${tg[2]}]\n${res}\n\nNow answer the user from this, citing links. Do not output another tool tag unless essential.`});a={r:'assistant',c:''};c.m.push(a);render();continue}
+a.c=harvest(out);break}}
+catch(e){if(e.name!='AbortError'){a.c=(strip(a.c)?a.c+'\n\n':'')+'⚠️ '+e.message}}
+busy=false;a.tool='';if(!strip(a.c))c.m.pop();render();save();post(c,text,a).catch(()=>{});
+if(S.tts&&strip(a.c)){const u=new SpeechSynthesisUtterance(strip(a.c).replace(/```[\s\S]*?```/g,' code ').replace(/[*#`_]|https?:\S+/g,''));speechSynthesis.speak(u)}
+summarize(c).catch(()=>{})}
+async function summarize(c){const vis=c.m.filter(x=>!x.h);if(c.m.length-(c.sn||0)<=30)return;const cut=c.m.length-16,old=c.m.slice(c.sn||0,cut).filter(x=>!x.h).map(x=>x.r+': '+x.c.slice(0,500)).join('\n');
+c.sum=await A('Summarize this conversation compactly (key facts, decisions, open questions) in under 200 words. Output only the summary.',(c.sum?'Previous summary: '+c.sum+'\n\n':'')+old);c.sn=cut;D.epi=D.epi.filter(x=>x.id!=c.id);D.epi.push({id:c.id,t:c.t,s:c.sum});D.epi=D.epi.slice(-40);save()}
+
+/* ---------- panes ---------- */
+function chatList(){const q=($('#q').value||'').toLowerCase();$('#cl').innerHTML=D.chats.filter(c=>!q||c.t.toLowerCase().includes(q)||c.m.some(m=>m.c&&m.c.toLowerCase().includes(q))).map(c=>`<div class=li><span onclick="cur='${c.id}';render();show('')">${esc(c.t)}</span><button class=ib onclick="ren('${c.id}')">✏️</button><button class=ib onclick="del('${c.id}')">🗑</button></div>`).join('')}
+const ren=id=>{const c=D.chats.find(x=>x.id==id),t=prompt('Rename chat',c.t);if(t){c.t=t;save();chatList();render()}};
+const del=id=>{if(!confirm('Delete this chat?'))return;D.chats=D.chats.filter(c=>c.id!=id);if(cur==id)cur=D.chats[0]?.id;if(!cur)return newChat();save();chatList();render()};
+const origShow=show;window.show=id=>{origShow(id);if(id=='pc')chatList()};
+const F=[['prov'],['base'],['model'],['sys'],['temp'],['name'],['pers'],['mem',1],['auto',1],['tts',1],['fb']];
+function fill(){F.forEach(([k,c])=>{const e=$('#s_'+k);c?e.checked=S[k]:e.value=S[k]});$('#s_key').value=S.keys[S.prov]||''}
+F.forEach(([k,c])=>$('#s_'+k).addEventListener('input',e=>{S[k]=c?e.target.checked:e.target.value;if(k=='prov'){S.base=P[S.prov][0];S.model=P[S.prov][1];fill()}save()}));
+$('#s_key').oninput=e=>{S.keys[S.prov]=e.target.value.trim();save()};
+async function test(){$('#tr').textContent='Testing…';try{$('#tr').textContent='✅ '+(await ask('You are a test.','Reply with just: Connected.')).trim()}catch(e){$('#tr').textContent='❌ '+e.message}}
+async function models(){try{const k=S.keys[S.prov]||'',A=S.prov=='anthropic',h=A?{'x-api-key':k,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'}:{Authorization:'Bearer '+k};
+const j=await(await fetch(S.base.replace(/\/+$/,'')+'/models',{headers:h})).json();$('#ml').innerHTML=j.data.map(m=>`<option value="${esc(m.id)}">`).join('');$('#tr').textContent='✅ '+j.data.length+' models loaded: tap the Model box to choose.'}catch(e){$('#tr').textContent='❌ Could not load models: '+e.message}}
+function memList(){$('#ml2').innerHTML=D.mems.map((m,i)=>`<div class=li><span onclick="editM(${i})">${esc(m.t)}</span><button class=ib onclick="delM(${i})">🗑</button></div>`).join('')||'<p style="opacity:.6">Nothing yet. Tell Bob "remember that…".</p>';
+$('#ml2').innerHTML+=`<p style="font-size:13px;opacity:.7">${D.les.length} lessons · ${D.g.length} graph facts · ${D.epi.length} episodes · ${D.ds.length} dataset rows</p>`}
+const addM=()=>{addMem($('#nm').value);$('#nm').value='';save();memList()},delM=i=>{D.mems.splice(i,1);save();memList()},editM=i=>{const t=prompt('Edit memory',D.mems[i].t);if(t!==null){t.trim()?D.mems[i].t=t.trim():D.mems.splice(i,1);save();memList()}};
+async function tidy(){if(D.mems.length<2||!confirm('Let the AI merge duplicates and drop trivial items?'))return;try{const o=await ask('Merge duplicate or overlapping facts and drop trivial or temporary ones. Keep one short fact per line, each starting with "- ". Output only the list.',D.mems.map(m=>'- '+m.t).join('\n'));
+const l=o.split('\n').filter(x=>x.trim().startsWith('-')).map(x=>x.trim().slice(1).trim()).filter(Boolean);if(l.length){D.mems=l.map(t=>({t,ts:Date.now()}));save();memList()}}catch(e){alert(e.message)}}
+function exp(){const b=new Blob([JSON.stringify({app:'aibob',v:1,S:{...S,keys:{}},D},rep)],{type:'application/json'}),f=new File([b],'ai-bob-backup-'+new Date().toISOString().slice(0,10)+'.json',{type:'application/json'});
+if(navigator.canShare?.({files:[f]}))navigator.share({files:[f]}).catch(()=>{});else{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=f.name;a.click()}}
+$('#imp').onchange=async e=>{const f=e.target.files[0];if(!f)return;const t=await f.text();let n=0,o;try{o=JSON.parse(t)}catch{}
+if(o&&o.app=='aibob'){o.D.chats.forEach(c=>{if(!D.chats.some(x=>x.id==c.id)){D.chats.push(c);n++}});o.D.mems.forEach(m=>addMem(m.t));D.les.push(...o.D.les.filter(l=>!D.les.some(x=>x.l==l.l)));['g','epi','ds'].forEach(k=>D[k].push(...(o.D[k]||[])));if(o.S){S.name=S.name||o.S.name;S.pers=o.S.pers||S.pers}}
+else if(o){if(o.userName&&o.userName!='Why')S.name=o.userName;if(PERS[o.personality])S.pers=o.personality;(o.profile||'').split(/(?<=\.)\s+/).forEach(addMem);(o.rules||[]).forEach(r=>addMem(r.text||r.rule||r));
+(o.learningLedger||[]).forEach(l=>{if(l.lesson&&!D.les.some(x=>x.l==l.lesson))D.les.push({o:l.outcome=='negative'?'neg':'pos',t:l.topic||'',l:l.lesson})});
+const m=(o.messages||[]).filter(x=>x.content&&/^(user|assistant)$/.test(x.role)).map(x=>({r:x.role,c:x.content}));if(m.length&&!D.chats.some(c=>c.t=='Imported from Crazy Bob'&&c.m.length==m.length)){D.chats.push({id:'cb'+Date.now().toString(36),t:'Imported from Crazy Bob',m,u:Date.now()});n++}}
+else{let hd='';t.split('\n').forEach(l=>{l=l.trim();if(l.startsWith('##')){hd=l.toLowerCase();return}if(!l.startsWith('- ')||hd.includes('how bob should'))return;let x=l.slice(2);if(/^Name:/.test(x)){S.name=x.slice(5).trim();x="The user's name is "+S.name}addMem(x)})}
+save();memList();fill();$('#ir').textContent='✅ Imported. '+D.mems.length+' memories, '+D.les.length+' lessons, '+n+' chats added.';e.target.value=''};
+
+/* ---------- ENGINE: reasoning loops ---------- */
+const LPN={search:'Test-time search: draft 3 answers, judge, keep the best',percept:'Perception-action: plan and run live tools first',heal:'Self-healing: retry, repair JSON, fallback model',causal:'Causal simulation: what-if scenarios',verify:'Self-play critic + objective verifier (runs code and checks arithmetic)',meta:'Metacognition: plan, confidence rating',swarm:'Swarm: researcher, planner and skeptic agents',curious:'Curiosity: finds knowledge gaps',learn:'Continuous learning: lessons, skills, training dataset',tier:'Tiered memory: working, episodic, knowledge graph'};
+const DEEP=['search','percept','causal','verify','meta','swarm','curious'],TAG=/\[\[(news|search|read):\s*([^\]]*)\]\]/i;
+const LP=()=>DEEP.some(k=>S.lp[k]),st=(a,t)=>{a.tool=t;render()};
+async function gen(m,s,sg,a,live){let o='';for await(const t of stream(m,s,sg)){o+=t;if(live){a.c=o;upd()}}return o}
+async function heal(fn){for(let i=0;;i++){try{return await fn()}catch(e){if(e.name=='AbortError'||!S.lp.heal||i>=2)throw e;await new Promise(r=>setTimeout(r,700*(i+1)));if(i==1&&S.fb&&S.model!=S.fb){const m=S.model;S.model=S.fb;try{return await fn()}finally{S.model=m}}}}}
+const A=(s,u,sg)=>heal(()=>ask(s,u,sg)),G=(m,s,sg,a,live)=>heal(()=>gen(m,s,sg,a,live));
+async function J(sys,u,sg){let o=await A(sys+'\nReturn ONLY valid JSON.',u,sg);for(let i=0;i<2;i++){try{return JSON.parse(o.match(/[\[{][\s\S]*[\]}]/)[0])}catch{if(!S.lp.heal)return null;o=await A('Repair this into valid JSON. Return ONLY the JSON.',o,sg)}}return null}
+const tail=(c,a)=>c.m.filter(x=>!x.h&&x!==a).slice(-6).map(x=>x.r.toUpperCase()+': '+(x.c||'').slice(0,600)).join('\n');
+function runJS(code){return new Promise(r=>{const w=new Worker(URL.createObjectURL(new Blob(["onmessage=e=>{let o=[];console.log=(...a)=>o.push(a.join(' '));try{const v=(0,eval)(e.data);postMessage(o.join('\\n')+(v===undefined?'':'\\n=> '+String(v)))}catch(x){postMessage('ERROR: '+x.message)}}"])));const t=setTimeout(()=>{w.terminate();r('TIMEOUT')},3000);w.onmessage=e=>{clearTimeout(t);w.terminate();r(e.data)};w.onerror=e=>{clearTimeout(t);w.terminate();r('ERROR: '+e.message)};w.postMessage(code)})}
+async function objective(t){const r=[];
+if(typeof Worker!='undefined')for(const m of[...t.matchAll(/```(?:js|javascript)\n([\s\S]*?)```/g)].slice(0,2))r.push('JS code ran -> '+await runJS(m[1]));
+for(const m of t.matchAll(/(\d[\d\s.+\-*\/()]*?)\s*=\s*(-?\d[\d.]*)/g)){const l=m[1].trim();if(!/[+\-*\/]/.test(l)||!/^[\d\s.+\-*\/()]+$/.test(l))continue;try{const v=Function('"use strict";return('+l+')')(),n=parseFloat(m[2]),d=(m[2].split('.')[1]||'').length;if(Math.abs(v-n)>0.5*Math.pow(10,-d)+1e-9)r.push(`ARITHMETIC MISMATCH: ${l} = ${+v.toFixed(6)} but the answer says ${m[2]}`)}catch{}}
+return r.join('\n')||'none applicable'}
+async function deep(c,a,text){const sg=ctl.signal,L=S.lp,H=tail(c,a);let ex='',tr='',ver=false,iss=[];a.deep=1;
+if(L.meta){st(a,'🧠 planning');ex+='\n\nYour private plan:\n'+await A('You are a metacognitive planner. In under 80 words: restate the goal, list the knowledge or tools needed, key risks, and which parts you are unsure of.',H+'\nUSER: '+text,sg)}
+if(L.percept){st(a,'👁 choosing tools');const t=await J('Decide which live tools are needed to answer. Tools: news(topic or "top"), search(query), read(url). Return {"calls":[{"tool":"news|search|read","arg":"..."}]} with at most 3 calls, or {"calls":[]} if none are needed.',H+'\nUSER: '+text,sg);
+ for(const k of(t?.calls||[]).slice(0,3)){if(!/^(news|search|read)$/.test(k.tool))continue;st(a,'🔎 '+k.tool+': '+k.arg);tr+=`\n[${k.tool}: ${k.arg}]\n`+await tool(k.tool,String(k.arg))}}
+if(L.causal&&/\b(what if|if i|should i|would happen|why did|cause|impact|effect|consequence|decide|decision)\b/i.test(text)){st(a,'🔀 simulating scenarios');ex+='\n\nCausal simulation:\n'+await A('Build a brief causal model: key variables, causal links, then simulate 2-3 scenarios (intervention, likely effects, probability, second-order effects). Under 150 words.',H+'\nUSER: '+text,sg)}
+if(L.swarm){st(a,'🐝 swarm working');const R=[['Researcher','List the key facts and evidence needed; flag uncertain ones.'],['Planner','Propose the best structure for a great answer.'],['Skeptic','List likely mistakes, missing cases and wrong assumptions.']];
+ const n=await Promise.all(R.map(([r,i])=>A(`You are the ${r} in a team. ${i} Under 100 words.`,H+'\nUSER: '+text+(tr?'\nTool results:'+tr:''),sg).catch(()=>'')));ex+='\n\nTeam notes:\n'+R.map((r,i)=>`${r[0]}: ${n[i]}`).join('\n')}
+if(tr)ex+='\n\nLIVE TOOL RESULTS (ground truth; cite the links):'+tr;
+const sys=sysP(text,c)+ex+(L.meta?'\nEnd your answer with one line: "Confidence: NN% (short reason)".':''),hist=ctx(c,a);let out;
+if(L.search){st(a,'🌲 drafting 3 answers');const ap=['Answer directly and concisely.','Reason step by step, then answer.','Be skeptical: check assumptions first, then answer.'];
+ const cs=await Promise.all(ap.map(p=>G(hist,sys+'\nApproach: '+p+'\nNever output tool tags.',sg,a,0).catch(()=>'')));
+ st(a,'⚖️ judging answers');const sc=await J('Score each candidate answer 0-10 for correctness, completeness and clarity. Return {"best":<index 0-2>}.',`Question: ${text}\n`+cs.map((x,i)=>`--- Candidate ${i}\n${x}`).join('\n'),sg);
+ out=(cs[sc?.best]||cs.find(Boolean)||'')}
+else{st(a,'✍️ answering');out=await G(hist,sys,sg,a,1);const tg=out.match(TAG);if(tg){st(a,'🔎 '+tg[1]+': '+tg[2]);const r=await tool(tg[1].toLowerCase(),tg[2]);tr+=`\n[${tg[1]}: ${tg[2]}]\n`+r;out=await G(hist,sys+'\n\nLIVE TOOL RESULT (ground truth; cite links):\n'+r+'\nDo not output tool tags.',sg,a,1)}}
+out=out.replace(TAG,'');
+if(L.verify){for(let r=0;r<2;r++){st(a,'🛡 verifying');const ob=await objective(out),v=await J('You are a strict critic. Check the draft for factual errors, logic errors, unsupported claims and missed parts of the question. Objective check results and tool results are ground truth. Return {"ok":true|false,"issues":["..."]}.',`Question: ${text}\n\nDraft:\n${out}\n\nObjective checks:\n${ob}\n\nTool results:${tr||' none'}`,sg);
+  if(!v||v.ok!==false||!v.issues?.length){ver=!!v;break}
+  iss=iss.concat(v.issues);st(a,'🔧 fixing issues');out=await G(hist,sys+'\n\nYour previous draft had problems:\n- '+v.issues.join('\n- ')+'\n\nPrevious draft:\n'+out+'\n\nWrite the corrected final answer. Do not output tool tags.',sg,a,1);out=out.replace(TAG,'')}}
+if(L.curious){st(a,'🧐 looking for gaps');const g=await J('You are a curiosity module. List up to 2 things you lack that would help the user (about them or the topic). Return {"gaps":["short question to ask the user"]}.',H+'\nUSER: '+text+'\nASSISTANT: '+out,sg);if(g?.gaps?.length){D.cur=[...D.cur,...g.gaps.map(String)].slice(-30);out+='\n\n_Curious: '+g.gaps[0]+'_'}}
+a.c=harvest(out)+(ver?'\n\n✅ Checked by critic':'');a.v=ver;a.iss=iss;a.tool=''}
+function tierCtx(q){if(!S.lp.tier||!S.mem)return'';let s='';const g=rel(D.g,q,8,x=>x.join(' ')),e=rel(D.epi,q,2,x=>x.t+' '+x.s);if(g.length)s+='\n\nKnowledge graph facts:\n'+g.map(x=>`- ${x[0]} —${x[1]}→ ${x[2]}`).join('\n');if(e.length)s+='\n\nEarlier conversations:\n'+e.map(x=>`- ${x.t}: ${x.s}`).join('\n');return s}
+async function post(c,text,a){const L=S.lp,ans=strip(a.c);if(!ans)return;
+if(L.learn){if(a.iss?.length)D.les.push({o:'pos',t:text.slice(0,100),l:'Skill: before answering similar questions, check for: '+a.iss.slice(0,3).join('; ')});D.ds.push({prompt:text,completion:ans,verified:!!a.v,model:S.model,ts:Date.now()});D.ds=D.ds.slice(-500);D.les=D.les.slice(-100)}
+if(L.tier){const t=await J('Extract up to 5 durable facts from this exchange as triples about the user, their people, places, projects or things. Return {"t":[["subject","relation","object"]]} or {"t":[]}.','USER: '+text+'\nASSISTANT: '+ans.slice(0,800));for(const x of t?.t||[])if(Array.isArray(x)&&x.length==3){const k=x.join(' ').toLowerCase();if(!D.g.some(y=>y.join(' ').toLowerCase()==k))D.g.push(x.map(String))}D.g=D.g.slice(-300)}
+save()}
+function dl(b,n){const f=new File([b],n);if(navigator.canShare?.({files:[f]}))navigator.share({files:[f]}).catch(()=>{});else{const x=document.createElement('a');x.href=URL.createObjectURL(b);x.download=n;x.click()}}
+const expDS=()=>dl(new Blob([D.ds.map(x=>JSON.stringify({messages:[{role:'user',content:x.prompt},{role:'assistant',content:x.completion}],verified:x.verified})).join('\n')],{type:'application/jsonl'}),'bob-training-'+new Date().toISOString().slice(0,10)+'.jsonl');
+$('#lps').innerHTML=Object.entries(LPN).map(([k,v])=>`<div class=ck><input type=checkbox data-lp=${k} ${S.lp[k]?'checked':''}>${v}</div>`).join('');
+$('#lps').onchange=e=>{S.lp[e.target.dataset.lp]=e.target.checked;save()};
+
+/* ---------- voice, photos, input ---------- */
+let rec;function mic(){const R=window.SpeechRecognition||window.webkitSpeechRecognition;if(!R)return alert('Voice input is not supported in this browser.');if(rec){rec.stop();return}
+rec=new R();rec.lang=navigator.language;rec.interimResults=true;rec.onresult=e=>{$('#in').value=[...e.results].map(r=>r[0].transcript).join('')};rec.onend=()=>{rec=null;$('#mic').textContent='🎤';if(S.tts&&$('#in').value.trim())go()};rec.start();$('#mic').textContent='🔴'}
+function chip(){const c=$('#chip');c.style.display=img?'block':'none';c.innerHTML=img?'📷 Photo attached <a href="#" onclick="img=null;chip();return false">remove</a>':''}
+$('#pic').onchange=e=>{const f=e.target.files[0];if(!f)return;const im=new Image();im.onload=()=>{const s=Math.min(1,1280/Math.max(im.width,im.height)),cv=document.createElement('canvas');cv.width=im.width*s;cv.height=im.height*s;cv.getContext('2d').drawImage(im,0,0,cv.width,cv.height);img=cv.toDataURL('image/jpeg',.82);chip()};im.src=URL.createObjectURL(f);e.target.value=''};
+$('#in').addEventListener('input',e=>{e.target.style.height='auto';e.target.style.height=Math.min(130,e.target.scrollHeight)+'px'});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)save()});
+cur=D.chats[0]?.id;if(!cur)newChat();else render();if(!S.keys[S.prov]&&S.prov!='custom'){fill();show('ps')}
+</script></body></html>
