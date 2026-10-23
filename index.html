@@ -42,10 +42,11 @@ header b{flex:1;text-align:center;overflow:hidden;white-space:nowrap;text-overfl
 <label>Provider</label><select id=s_prov><option value=local>On-device (free, no key)</option><option value=openai>OpenAI</option><option value=anthropic>Anthropic</option><option value=openrouter>OpenRouter</option><option value=custom>Custom (OpenAI-compatible)</option></select>
 <div id=apibox><label>Base URL</label><input id=s_base autocapitalize=none><label>API key (stays on this iPhone)</label><input id=s_key type=password autocapitalize=none>
 <label>Model</label><input id=s_model list=ml autocapitalize=none><datalist id=ml></datalist>
-<button class="btn g" onclick=models()>Fetch model list</button><button class=btn onclick=test()>Test connection</button></div><div id=lbox style="display:none"><label>Choose a model, then download it once (it is saved on your iPhone)</label><select id=lsel><option value="SmolLM2-360M-Instruct-q4f16_1-MLC">SmolLM2 360M (~0.4 GB, fastest)</option><option value="Qwen2.5-0.5B-Instruct-q4f16_1-MLC">Qwen2.5 0.5B (~0.5 GB)</option><option value="Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama 3.2 1B (~0.9 GB, balanced)</option><option value="Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen2.5 1.5B (~1.1 GB, smarter)</option><option value="Llama-3.2-3B-Instruct-q4f16_1-MLC">Llama 3.2 3B (~2 GB, may crash on iPhone)</option></select><button class=btn onclick=dlLocal()>Download &amp; load model</button></div><div id=tr></div>
+<button class="btn g" onclick=models()>Fetch model list</button><button class=btn onclick=test()>Test connection</button></div><div id=lbox style="display:none"><label>Choose a model, then download it once (it is saved on your iPhone)</label><select id=lsel></select><button class=btn onclick=dlLocal()>Download &amp; load model</button><button class="btn g" onclick=allModels()>Show every supported model</button><p style="font-size:13px;opacity:.7">⚠ = large; may crash on iPhone. Qwen3 models think silently first, so replies start a little slower.</p></div><div id=tr></div>
 <label>Your name</label><input id=s_name><label>Personality</label><select id=s_pers><option value=caring>Caring & supportive</option><option value=classic>Classic Bob</option><option value=calm>Calm & thoughtful</option><option value=coach>Motivational coach</option><option value=formal>Professional / formal</option><option value=witty>Extra witty</option></select>
 <label>System prompt</label><textarea id=s_sys rows=4></textarea><label>Temperature (blank = model default)</label><input id=s_temp inputmode=decimal>
 <div class=ck><input type=checkbox id=s_mem>Use memory</div><div class=ck><input type=checkbox id=s_auto>Let Bob save facts automatically</div><div class=ck><input type=checkbox id=s_tts>Speak replies aloud (voice mode)</div>
+<h2 style="margin-top:20px">Online search (optional)</h2><p style="font-size:13px;opacity:.7;margin:0">Without keys Bob uses Wikipedia and free news feeds. Add a free key for real web search. Keys stay on this iPhone.</p><label>Tavily API key (1,000/mo free, best for AI)</label><input id=s_tk type=password autocapitalize=none placeholder="from tavily.com"><button class="btn g" onclick=testTk()>Test Tavily key</button><label>Serper.dev API key (2,500 free)</label><input id=s_sk type=password autocapitalize=none placeholder="from serper.dev"><button class="btn g" onclick=testSk()>Test Serper key</button><div id=sr></div>
 <label>Fallback model (used by self-healing if the main model keeps failing)</label><input id=s_fb autocapitalize=none><h2 style="margin-top:20px">Reasoning loops</h2><p style="font-size:13px;opacity:.7;margin:0">Each loop adds API calls: slower and costlier, but smarter.</p><div id=lps></div>
 <button class=btn onclick="show('')">Done</button></div>
 
@@ -60,7 +61,7 @@ const P={local:['','Llama-3.2-1B-Instruct-q4f16_1-MLC'],openai:['https://api.ope
 const PERS={caring:"Be warm, caring and emotionally attentive: acknowledge how the user seems to feel first, be patient and encouraging, use their name, stay honest rather than flattering.",classic:"Be lively, energetic, a little unhinged and friendly, with humour and real warmth.",calm:"Be calm, thoughtful and measured; avoid hype; prefer clarity.",coach:"Be a motivational coach: encouraging, practical, action-oriented.",formal:"Be professional, formal and polished; minimal slang or jokes.",witty:"Be extra witty and playfully sarcastic while staying kind and helpful."};
 let S=JSON.parse(LS.ab_s||'null')||{prov:'local',base:'',model:'Llama-3.2-1B-Instruct-q4f16_1-MLC',keys:{},sys:"You are AI Bob, a smart, friendly, concise personal assistant on the user's iPhone.",temp:'',name:'',pers:'caring',mem:true,auto:true,tts:false};
 let D=JSON.parse(LS.ab_d||'null')||{chats:[],mems:[],les:[]};
-S.fb=S.fb||'';S.lp=S.lp||{heal:true,verify:true,meta:true,tier:true,learn:true};['g','epi','ds','cur'].forEach(k=>D[k]=D[k]||[]);
+S.fb=S.fb||'';S.sk=S.sk||'';S.tk=S.tk||'';S.lp=S.lp||{heal:true,verify:true,meta:true,tier:true,learn:true};['g','epi','ds','cur'].forEach(k=>D[k]=D[k]||[]);
 let cur=null,busy=false,ctl=null,img=null;
 const rep=(k,v)=>k=='img'?undefined:v;
 const save=()=>{LS.ab_s=JSON.stringify(S);try{LS.ab_d=JSON.stringify(D,rep)}catch(e){alert('Storage full: export a backup, then delete old chats.')}};
@@ -69,7 +70,7 @@ const esc=t=>t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const show=id=>document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==id));
 const chat=()=>D.chats.find(c=>c.id==cur);
 const W=t=>new Set(t.toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>3));
-const strip=t=>t.replace(/\[\[remember:[\s\S]*?\]\]/gi,'').replace(/\[\[(news|search|read):[^\]]*\]\]/gi,'').replace(/\[\[[^\]]*$/,'').trim();
+const strip=t=>t.replace(/<think>[\s\S]*?(<\/think>|$)/g,'').replace(/\[\[remember:[\s\S]*?\]\]/gi,'').replace(/\[\[(news|search|read):[^\]]*\]\]/gi,'').replace(/\[\[[^\]]*$/,'').trim();
 
 function md(t){const bl=[];t=t.replace(/```(\w*)\n?([\s\S]*?)```/g,(_,l,c)=>{bl.push(c);return'\u0000'+(bl.length-1)+'\u0000'});t=esc(t);
 t=t.replace(/((?:^\|.*\|[ \t]*\n?)+)/gm,tb=>'<table>'+tb.trim().split('\n').filter(x=>!/^\|[\s:|-]+\|$/.test(x.trim())).map((x,i)=>'<tr>'+x.trim().slice(1,-1).split('|').map(c=>`<${i?'td':'th'}>${c.trim()}</${i?'td':'th'}>`).join('')+'</tr>').join('')+'</table>');
@@ -91,6 +92,11 @@ if(S.auto)s+='\n\nIf the user shares a lasting fact or asks you to remember some
 s+=tierCtx(q);return s+'\n\nLIVE TOOLS: for current information output ONLY one tag and stop: [[news: topic or top]] for headlines, [[search: query]] for web/Wikipedia results, [[read: url]] for page text. You will then receive the results; answer from them and cite links. Never claim you cannot browse.'}
 
 /* ---------- on-device models (WebLLM) ---------- */
+const LM=[['SmolLM2-135M-Instruct-q0f16-MLC','SmolLM2 135M · tiny, ~0.3 GB'],['SmolLM2-360M-Instruct-q4f16_1-MLC','SmolLM2 360M · ~0.4 GB'],['Qwen2.5-0.5B-Instruct-q4f16_1-MLC','Qwen2.5 0.5B · ~0.5 GB'],['Qwen3-0.6B-q4f16_1-MLC','Qwen3 0.6B · ~0.6 GB'],['Llama-3.2-1B-Instruct-q4f16_1-MLC','Llama 3.2 1B · ~0.9 GB (balanced)'],['TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC','TinyLlama 1.1B · ~0.7 GB'],['Qwen2.5-1.5B-Instruct-q4f16_1-MLC','Qwen2.5 1.5B · ~1.1 GB'],['Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC','Qwen2.5 Coder 1.5B · ~1.1 GB (code)'],['SmolLM2-1.7B-Instruct-q4f16_1-MLC','SmolLM2 1.7B · ~1.3 GB'],['Qwen3-1.7B-q4f16_1-MLC','Qwen3 1.7B · ~1.4 GB'],['gemma-2-2b-it-q4f16_1-MLC','Gemma 2 2B · ~1.9 GB'],['Llama-3.2-3B-Instruct-q4f16_1-MLC','Llama 3.2 3B · ~2.3 GB ⚠'],['Qwen2.5-3B-Instruct-q4f16_1-MLC','Qwen2.5 3B · ~2.5 GB ⚠'],['Phi-3.5-mini-instruct-q4f16_1-MLC','Phi 3.5 mini 3.8B · ~3.7 GB ⚠'],['Qwen3-4B-q4f16_1-MLC','Qwen3 4B · ~3.4 GB ⚠ (smartest small)']];
+function fillLsel(l){const s=$('#lsel');s.innerHTML=l.map(([i,t])=>`<option value="${esc(i)}">${esc(t)}</option>`).join('');if(![...s.options].some(o=>o.value==S.model))s.add(new Option(S.model,S.model));s.value=S.model}
+async function allModels(){try{setStat('Loading the list of supported models…');const{prebuiltAppConfig:c}=await import('https://esm.run/@mlc-ai/web-llm@0.2.79');
+const l=c.model_list.filter(m=>!m.model_type&&!/embed/i.test(m.model_id)).sort((a,b)=>(a.vram_required_MB||0)-(b.vram_required_MB||0)).map(m=>[m.model_id,m.model_id.replace(/-MLC$/,'')+' · '+((m.vram_required_MB||0)/1000).toFixed(1)+' GB'+((m.vram_required_MB||0)>3500?' ⚠':'')]);
+fillLsel(l);setStat('✅ '+l.length+' models available. Pick one, then tap Download & load.')}catch(e){setStat('❌ '+e.message)}}
 let eng=null,engId='',lstat='';
 function setStat(t){lstat=t;$('#tr').textContent=t;if(busy)render()}
 async function loadLocal(id){if(eng&&engId==id)return eng;if(!navigator.gpu)throw Error('This browser has no WebGPU, so on-device models cannot run. Update iOS, or use an API key instead.');
@@ -98,7 +104,7 @@ const{CreateMLCEngine}=await import('https://esm.run/@mlc-ai/web-llm@0.2.79');en
 async function dlLocal(){try{setStat('Starting download…');await loadLocal(S.model);setStat('✅ Model ready. Close settings and chat. It works offline now.')}catch(e){setStat('❌ '+e.message)}}
 /* ---------- API ---------- */
 async function* stream(msgs,sys,signal){
-if(S.prov=='local'){const e=await loadLocal(S.model),ms=[{role:'system',content:sys.slice(0,5000)},...msgs.filter(m=>m.c).slice(-8).map(m=>({role:m.r,content:m.c.slice(0,3000)}))];
+if(S.prov=='local'){const e=await loadLocal(S.model),ms=[{role:'system',content:sys.slice(0,5000)},...msgs.filter(m=>m.c).slice(-8).map(m=>({role:m.r,content:m.c.slice(0,3000)}))];if(/qwen3/i.test(S.model)){const l=ms[ms.length-1];if(l.role=='user')l.content+=' /no_think'}
  const it=await e.chat.completions.create({messages:ms,stream:true,temperature:S.temp===''?0.7:+S.temp,max_tokens:1024});signal?.addEventListener('abort',()=>e.interruptGenerate());
  for await(const ch of it){const t=ch.choices[0]?.delta?.content;if(t)yield t}return}
 const A=S.prov=='anthropic',key=S.keys[S.prov]||'';
@@ -120,7 +126,19 @@ async function ask(sys,u,sg){let o='';for await(const t of stream([{r:'user',c:u
 const gw=[u=>u,u=>'https://api.allorigins.win/raw?url='+encodeURIComponent(u),u=>'https://corsproxy.io/?'+encodeURIComponent(u),u=>'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u)];
 const get=(u,j)=>Promise.any(gw.map(async g=>{const r=await fetch(g(u),{signal:AbortSignal.timeout(9000)});if(!r.ok)throw 0;return j?r.json():r.text()}));
 async function feed(u,n){const x=new DOMParser().parseFromString(await get(u),'text/xml');return[...x.querySelectorAll('item,entry')].slice(0,n).map(i=>{const g=t=>i.querySelector(t)?.textContent?.trim()||'';return`${g('title')} (${(g('pubDate')||g('updated')||g('date')).slice(0,22)})\n${g('description').replace(/<[^>]+>/g,'').slice(0,200)}\n${g('link')||i.querySelector('link')?.getAttribute('href')||''}`})}
-async function tool(k,a){a=a.trim();try{
+const NET=e=>e.name=='TypeError'?Error('Could not reach the search service. Check your internet and the key.'):e;
+async function serper(q,news){try{const r=await fetch('https://google.serper.dev/'+(news?'news':'search'),{method:'POST',headers:{'X-API-KEY':S.sk,'Content-Type':'application/json'},body:JSON.stringify({q,num:8}),signal:AbortSignal.timeout(15000)});if(!r.ok)throw Error('Serper error '+r.status+': '+(await r.text()).slice(0,120));const d=await r.json();
+ const ab=d.answerBox?'Answer box: '+(d.answerBox.answer||d.answerBox.snippet||'')+'\n':'',kg=d.knowledgeGraph?'Knowledge: '+(d.knowledgeGraph.title||'')+' - '+(d.knowledgeGraph.description||'')+'\n':'';
+ const it=(news?d.news:d.organic)||[];if(!it.length&&!ab)throw Error('no results');return 'Serper (Google) results:\n'+ab+kg+it.map((x,i)=>`${i+1}. ${x.title}${x.date?' ('+x.date+')':''}\n   ${x.snippet||''}\n   ${x.link}`).join('\n\n')}catch(e){throw NET(e)}}
+async function tavily(q){try{const r=await fetch('https://api.tavily.com/search',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+S.tk},body:JSON.stringify({api_key:S.tk,query:q,search_depth:'basic',include_answer:true,max_results:6}),signal:AbortSignal.timeout(18000)});if(!r.ok)throw Error('Tavily error '+r.status+': '+(await r.text()).slice(0,120));const d=await r.json();
+ return 'Tavily results:\n'+(d.answer?'Answer: '+d.answer+'\n\n':'')+(d.results||[]).map((x,i)=>`${i+1}. ${x.title}\n   ${x.content||''}\n   ${x.url}`).join('\n\n')}catch(e){throw NET(e)}}
+async function keyed(k,a){if(k=='read')return'';const top=!a||/^top$/i.test(a);
+ if(k=='news'&&S.sk){try{return await serper(top?'world news':a,1)}catch{}}
+ if(S.tk){try{return await tavily(k=='news'?(top?'top world news headlines today':a+' news today'):a)}catch{}}
+ if(k=='search'&&S.sk){try{return await serper(a,0)}catch{}}
+ return''}
+const testTk=async()=>{$('#sr').textContent='Testing…';try{await tavily('test');$('#sr').textContent='✅ Tavily key works'}catch(e){$('#sr').textContent='❌ '+e.message}},testSk=async()=>{$('#sr').textContent='Testing…';try{await serper('test',0);$('#sr').textContent='✅ Serper key works'}catch(e){$('#sr').textContent='❌ '+e.message}};
+async function tool(k,a){a=a.trim();try{if(S.tk||S.sk){const r=await keyed(k,a);if(r)return r}
 if(k=='news'){const top=!a||/^top$/i.test(a),src=top?[['BBC','https://feeds.bbci.co.uk/news/world/rss.xml'],['Guardian','https://www.theguardian.com/world/rss'],['Al Jazeera','https://www.aljazeera.com/xml/rss/all.xml'],['NPR','https://feeds.npr.org/1001/rss.xml']]:[['Google News','https://news.google.com/rss/search?q='+encodeURIComponent(a)+'&hl=en']];
 const r=await Promise.allSettled(src.map(async([n,u])=>'## '+n+'\n'+(await feed(u,top?4:8)).join('\n\n'))),ok=r.filter(x=>x.status=='fulfilled').map(x=>x.value);if(!ok.length)throw Error('all news sources unreachable');return ok.join('\n\n')}
 if(k=='search'){const[w,g]=await Promise.allSettled([get('https://en.wikipedia.org/w/api.php?action=query&list=search&srlimit=5&format=json&origin=*&srsearch='+encodeURIComponent(a),1),feed('https://news.google.com/rss/search?q='+encodeURIComponent(a)+'&hl=en',5)]);let o='';
@@ -158,9 +176,10 @@ const ren=id=>{const c=D.chats.find(x=>x.id==id),t=prompt('Rename chat',c.t);if(
 const del=id=>{if(!confirm('Delete this chat?'))return;D.chats=D.chats.filter(c=>c.id!=id);if(cur==id)cur=D.chats[0]?.id;if(!cur)return newChat();save();chatList();render()};
 const origShow=show;window.show=id=>{origShow(id);if(id=='pc')chatList()};
 const F=[['prov'],['base'],['model'],['sys'],['temp'],['name'],['pers'],['mem',1],['auto',1],['tts',1],['fb']];
-function fill(){F.forEach(([k,c])=>{const e=$('#s_'+k);c?e.checked=S[k]:e.value=S[k]});$('#s_key').value=S.keys[S.prov]||'';const lc=S.prov=='local';$('#apibox').style.display=lc?'none':'';$('#lbox').style.display=lc?'':'none';if(lc)$('#lsel').value=S.model}
+function fill(){F.forEach(([k,c])=>{const e=$('#s_'+k);c?e.checked=S[k]:e.value=S[k]});$('#s_key').value=S.keys[S.prov]||'';$('#s_tk').value=S.tk;$('#s_sk').value=S.sk;const lc=S.prov=='local';$('#apibox').style.display=lc?'none':'';$('#lbox').style.display=lc?'':'none';if(lc){if(![...$('#lsel').options].some(o=>o.value==S.model))$('#lsel').add(new Option(S.model,S.model));$('#lsel').value=S.model}}
 F.forEach(([k,c])=>$('#s_'+k).addEventListener('input',e=>{S[k]=c?e.target.checked:e.target.value;if(k=='prov'){S.base=P[S.prov][0];S.model=P[S.prov][1];if(S.prov=='local'){DEEP.forEach(k=>S.lp[k]=false);renderLps()}fill()}save()}));
 $('#s_key').oninput=e=>{S.keys[S.prov]=e.target.value.replace(/[^\x21-\x7E]/g,'');save()};
+fillLsel(LM);$('#s_tk').oninput=e=>{S.tk=e.target.value.replace(/[^\x21-\x7E]/g,'');save()};$('#s_sk').oninput=e=>{S.sk=e.target.value.replace(/[^\x21-\x7E]/g,'');save()};
 $('#lsel').onchange=e=>{S.model=e.target.value;save()};
 async function test(){$('#tr').textContent='Testing…';try{$('#tr').textContent='✅ '+(await ask('You are a test.','Reply with just: Connected.')).trim()}catch(e){$('#tr').textContent='❌ '+e.message}}
 async function models(){try{const k=S.keys[S.prov]||'',A=S.prov=='anthropic',h=A?{'x-api-key':k,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'}:{Authorization:'Bearer '+k};
